@@ -1,130 +1,126 @@
-# Serverless Data Quality Checker
+#  Serverless Data Quality Checker
 
-An event-driven, serverless pipeline on AWS that automatically validates CSV data quality whenever a file is uploaded to S3 — and emails a detailed report within minutes.
+> Automatically validate CSV data quality using AWS — upload a file and get an email report within minutes.
+
+ **Live Demo:** [https://harsha-official.github.io/Serverless-Data-Quality-Checker](https://harsha-official.github.io/Serverless-Data-Quality-Checker)
 
 ---
 
-## How it works
+##  What it does
+
+Upload a CSV file through the web interface → AWS automatically checks it for quality issues → You receive a detailed email report.
+
+No servers to manage. No manual steps. Fully automated.
+
+---
 
 ```
-CSV Upload → S3 → Lambda → Glue DataBrew → EventBridge → Lambda → SNS Email Report
+CSV Upload → S3 → Lambda → Glue DataBrew → EventBridge → Lambda → SNS Email
 ```
 
-1. You upload a CSV to the S3 input bucket
-2. S3 triggers a Lambda function automatically
+1. User uploads a CSV via the web UI
+2. S3 triggers the `dq-trigger` Lambda automatically
 3. Lambda starts a Glue DataBrew profile job
 4. DataBrew runs quality rules (nulls, duplicates, ranges, patterns)
-5. EventBridge detects job completion and triggers a second Lambda
+5. EventBridge detects job completion and triggers `dq-report` Lambda
 6. SNS sends an email report with pass/fail results
 
 ---
 
-## Project structure
+##  Web Interface
+
+A clean, simple HTML interface that lets you:
+- Drag and drop or browse CSV files
+- Configure your AWS bucket and credentials
+- Watch the pipeline progress in real time
+- See pass/fail results for each quality rule
+
+---
+
+##  AWS Services Used
+
+| Service | Purpose | Free Tier |
+|---|---|---|
+| S3 | Store input CSVs and job output | 5 GB / month |
+| Lambda | Event-driven compute | 1M requests / month |
+| Glue DataBrew | Run data quality rules | 40 DPU-hours / month |
+| SNS | Send email reports | 1K email deliveries / month |
+| EventBridge | Detect job completion | 14M events / month |
+| IAM | Roles and permissions | Always free |
+
+---
+
+##  Project Structure
 
 ```
-dq-checker/
+Serverless-Data-Quality-Checker/
+│
+├── index.html              ← Web upload interface
 │
 ├── lambda/
-│   ├── trigger_lambda.py       # Triggered on S3 upload; starts DataBrew job
-│   ├── report_lambda.py        # Triggered on job completion; sends email report
-│   └── requirements.txt        # Python dependencies (boto3)
-│
-├── databrew/
-│   └── ruleset.json            # Data quality rules definition
+│   ├── trigger_lambda.py   ← Runs when CSV is uploaded to S3
+│   └── report_lambda.py    ← Runs when DataBrew job completes
 │
 ├── sample-data/
-│   ├── good_data.csv           # Clean dataset to test pass scenario
-│   └── bad_data.csv            # Dirty dataset to test fail scenario
+│   ├── good_data.csv       ← Clean data — all checks pass
+│   └── bad_data.csv        ← Dirty data — all checks fail
 │
-├── frontend/
-│   └── index.html              # Web UI for uploading CSV files
-│
-├── setup.sh                    # One-click AWS resource creation script
 └── README.md
 ```
 
 ---
 
-## AWS services used
+##  Data Quality Rules
 
-| Service | Purpose | Free tier |
+| Rule | Column | Check |
 |---|---|---|
-| S3 | Store input CSVs and DataBrew output | 5 GB storage, 20K GET requests/month |
-| AWS Lambda | Event-driven compute | 1M requests, 400K GB-seconds/month |
-| Glue DataBrew | Run data quality rules | 40 DPU-hours/month |
-| Amazon SNS | Send email reports | 1M publishes, 1K email deliveries/month |
-| EventBridge | Detect DataBrew job completion | 14M events/month |
-| IAM | Roles and permissions | Always free |
+| No missing emails | `email` | Must not be empty |
+| No missing names | `name` | Must not be empty |
+| Valid age range | `age` | Must be between 0 and 120 |
+| Unique user IDs | `user_id` | No duplicate values |
 
 ---
 
-## Prerequisites
+##  Setup Guide
 
-- AWS account (free tier)
-- Python 3.11 or higher
+### Prerequisites
+- AWS Free Tier account
+- Python 3.11+
 - AWS CLI installed and configured
 
+### 1. Configure AWS CLI
 ```bash
-# Install AWS CLI
-pip install awscli --upgrade
-
-# Configure with your credentials
 aws configure
-```
-
----
-
-## Setup — step by step
-
-### 1. Clone the project
-
-```bash
-git clone https://github.com/yourname/dq-checker.git
-cd dq-checker
+# Enter your Access Key, Secret Key, region (us-east-1), output (json)
 ```
 
 ### 2. Create S3 buckets
-
 ```bash
-# Replace "yourname" with a unique lowercase identifier
 aws s3 mb s3://dq-input-yourname
 aws s3 mb s3://dq-output-yourname
 ```
 
-### 3. Create SNS topic and subscribe your email
-
+### 3. Create SNS topic and subscribe email
 ```bash
-# Create the topic
 aws sns create-topic --name DataQualityAlerts
 
-# Subscribe your email — replace with your account ID and email
 aws sns subscribe \
   --topic-arn arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:DataQualityAlerts \
   --protocol email \
   --notification-endpoint your@email.com
 ```
 
-Check your inbox and click **Confirm subscription**.
+### 4. Create IAM Role
+- Go to IAM → Roles → Create Role → Lambda
+- Attach: `AmazonS3FullAccess`, `AWSGlueDataBrewFullAccessPolicy`, `AmazonSNSFullAccess`, `CloudWatchLogsFullAccess`
+- Name: `LambdaDQRole`
+- Add DataBrew as trusted entity in Trust Relationships
 
-### 4. Create IAM role for Lambda
-
-In the AWS Console:
-
-- Go to **IAM → Roles → Create Role**
-- Trusted entity: **Lambda**
-- Attach these managed policies:
-  - `AmazonS3FullAccess`
-  - `AWSGlueDataBrewFullAccessPolicy`
-  - `AmazonSNSFullAccess`
-  - `CloudWatchLogsFullAccess`
-- Name the role: `LambdaDQRole`
-
-### 5. Deploy Lambda functions
-
+### 5. Deploy Lambda Functions
 ```bash
 cd lambda
 
-# Package and deploy trigger function
+# Deploy trigger function
 zip trigger.zip trigger_lambda.py
 aws lambda create-function \
   --function-name dq-trigger \
@@ -132,9 +128,9 @@ aws lambda create-function \
   --role arn:aws:iam::YOUR_ACCOUNT_ID:role/LambdaDQRole \
   --handler trigger_lambda.lambda_handler \
   --zip-file fileb://trigger.zip \
-  --environment Variables="{JOB_NAME=dq-profile-job,SNS_ARN=arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:DataQualityAlerts}"
+  --environment "Variables={JOB_NAME=dq-profile-job,SNS_ARN=arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:DataQualityAlerts}"
 
-# Package and deploy report function
+# Deploy report function
 zip report.zip report_lambda.py
 aws lambda create-function \
   --function-name dq-report \
@@ -142,61 +138,50 @@ aws lambda create-function \
   --role arn:aws:iam::YOUR_ACCOUNT_ID:role/LambdaDQRole \
   --handler report_lambda.lambda_handler \
   --zip-file fileb://report.zip \
-  --environment Variables="{SNS_ARN=arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:DataQualityAlerts,OUTPUT_BUCKET=dq-output-yourname}"
+  --environment "Variables={SNS_ARN=arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:DataQualityAlerts,OUTPUT_BUCKET=dq-output-yourname}"
 ```
 
-### 6. Create DataBrew dataset, ruleset, and profile job
+### 6. Set up DataBrew (AWS Console)
+1. **Dataset** → Create → name: `dq-dataset` → source: your S3 input bucket
+2. **Ruleset** → Create → name: `dq-ruleset` → add 4 quality rules
+3. **Jobs** → Create profile job → name: `dq-profile-job` → attach ruleset → output to S3
 
-In the AWS Console:
+### 7. Add S3 Trigger
+- S3 → your input bucket → Properties → Event Notifications
+- Event type: PUT, Suffix: `.csv`, Destination: `dq-trigger` Lambda
 
-1. Go to **Glue DataBrew → Datasets → Create dataset**
-   - Name: `dq-dataset`
-   - Source: S3 → `s3://dq-input-yourname/`
-
-2. Go to **Rulesets → Create ruleset**
-   - Name: `dq-ruleset`
-   - Attached to: `dq-dataset`
-   - Add rules (no nulls, unique IDs, age 0–120, valid email format)
-
-3. Go to **Jobs → Create profile job**
-   - Name: `dq-profile-job`
-   - Dataset: `dq-dataset`
-   - Ruleset: `dq-ruleset`
-   - Output: `s3://dq-output-yourname/`
-
-### 7. Add S3 trigger to Lambda
-
-In the AWS Console:
-
-- Go to **S3 → dq-input-yourname → Properties → Event notifications**
-- Create notification:
-  - Name: `trigger-dq-check`
-  - Event type: `PUT` (s3:ObjectCreated:Put)
-  - Suffix filter: `.csv`
-  - Destination: Lambda → `dq-trigger`
-
-### 8. Add EventBridge rule for job completion
-
-In the AWS Console:
-
-- Go to **EventBridge → Rules → Create rule**
+### 8. Add EventBridge Rule
+- EventBridge → Rules → Create rule
 - Event pattern:
-
 ```json
 {
   "source": ["aws.databrew"],
   "detail-type": ["DataBrew Job State Change"],
-  "detail": {
-    "state": ["SUCCEEDED", "FAILED"]
-  }
+  "detail": { "state": ["SUCCEEDED", "FAILED"] }
 }
 ```
+- Target: `dq-report` Lambda
 
-- Target: Lambda → `dq-report`
+### 9. Enable CORS on S3 (for web UI upload)
+Create `cors.json`:
+```json
+{
+  "CORSRules": [
+    {
+      "AllowedOrigins": ["*"],
+      "AllowedMethods": ["PUT", "GET"],
+      "AllowedHeaders": ["*"]
+    }
+  ]
+}
+```
+```bash
+aws s3api put-bucket-cors --bucket dq-input-yourname --cors-configuration file://cors.json
+```
 
 ---
 
-## Testing
+##  Testing
 
 ```bash
 # Test with bad data — should trigger FAILED report
@@ -204,60 +189,38 @@ aws s3 cp sample-data/bad_data.csv s3://dq-input-yourname/
 
 # Test with good data — should trigger SUCCEEDED report
 aws s3 cp sample-data/good_data.csv s3://dq-input-yourname/
-
-# Watch Lambda logs in real time
-aws logs tail /aws/lambda/dq-trigger --follow
 ```
 
-You will receive two emails per upload — one when the check starts and one when it completes.
+Check your email inbox — you will receive two emails per upload:
+-  **Email 1** — Quality check started
+-  **Email 2** — Quality report (SUCCEEDED / FAILED)
 
 ---
 
-## Data quality rules
+##  Cost
 
-| Rule | Column | Check |
-|---|---|---|
-| No nulls | `name`, `email` | Must not be empty |
-| Unique IDs | `user_id` | No duplicate values |
-| Valid age | `age` | Between 0 and 120 |
-| Phone format | `phone` | Must be 10 digits |
-| Email format | `email` | Must match standard pattern |
+This project runs entirely within the AWS Free Tier for small workloads.
 
-Rules are configured in the DataBrew ruleset and can be customized in the AWS Console under **Glue DataBrew → Rulesets**.
+>  Set up an AWS Budget alert at $1 so you're never surprised by charges.
 
 ---
 
-## Sample data format
-
-Your CSV files should follow this structure:
-
-```
-user_id,name,email,age,phone
-1,Alice,alice@example.com,28,9876543210
-2,Bob,bob@example.com,34,8765432109
-```
-
----
-
-## Possible enhancements
+## Possible Enhancements
 
 - Store quality scores in DynamoDB to track trends over time
-- Build a CloudWatch dashboard for pass/fail metrics over time
+- Build a CloudWatch dashboard for pass/fail metrics
+- Schedule automatic checks with EventBridge cron
 - Add Glue Crawler to auto-catalog validated data for Athena queries
-- Schedule automatic checks with EventBridge cron (not just on upload)
-- Connect the frontend upload UI to S3 using the AWS JavaScript SDK
+- Add more rules — email format regex, phone number pattern, custom SQL
 
 ---
 
-## Cost estimate
 
-This project runs entirely within the AWS free tier for small to medium workloads. For reference:
-
-- Lambda: free up to 1M requests/month
-- Glue DataBrew: free up to 40 DPU-hours/month — keep datasets small and jobs short
-- S3: free up to 5 GB — delete old output files regularly
-- SNS: free up to 1,000 email deliveries/month
-
-> **Tip:** Set up an AWS Budget alert at $1 to get notified before any charges occur.
+**Harsha** — Built on AWS Free Tier  
+🔗 [GitHub](https://github.com/Harsha-official)
 
 ---
+
+## 📄 License
+
+MIT
