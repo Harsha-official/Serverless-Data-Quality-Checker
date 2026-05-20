@@ -1,0 +1,6 @@
+﻿user_id,name,email,age,phone
+1,Alice,alice@test.com,28,9876543210
+2,Bob,,200,12345
+1,Carol,carol@test.com,35,9876543210
+4,,dave@test.com,22,
+5,Eve,notanemail,30,9999
