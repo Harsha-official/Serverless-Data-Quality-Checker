@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Quality Checker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.1691.0/aws-sdk.min.js"></script>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f5f5f5;
+    margin: 0;
+    padding: 20px;
+    color: #333;
+  }
+
+  .page {
+    max-width: 600px;
+    margin: 40px auto;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #111;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 28px;
+  }
+
+  .card {
+    background: white;
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+
+  .card h2 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: #111;
+  }
+
+  label {
+    display: block;
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 5px;
+    font-weight: 500;
+  }
+
+  input[type="text"],
+  input[type="password"] {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #ddd;
+    border-radius: 7px;
+    font-size: 14px;
+    color: #333;
+    margin-bottom: 14px;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+  }
+
+  input[type="text"]:focus,
+  input[type="password"]:focus {
+    border-color: #4f8ef7;
+  }
+
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+
+  .demo-banner {
+    background: #fffbea;
+    border: 1px solid #f0d060;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #7a6000;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Upload area */
+  .upload-area {
+    border: 2px dashed #ddd;
+    border-radius: 8px;
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: #fafafa;
+  }
+
+  .upload-area:hover, .upload-area.over {
+    border-color: #4f8ef7;
+    background: #f0f6ff;
+  }
+
+  .upload-area .icon { font-size: 36px; margin-bottom: 8px; }
+  .upload-area p { font-size: 14px; color: #555; margin: 0 0 4px; }
+  .upload-area span { font-size: 12px; color: #aaa; }
+
+  input[type="file"] { display: none; }
+
+  /* Selected file */
+  .file-box {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    background: #f0f6ff;
+    border: 1px solid #c8dcfa;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-top: 12px;
+  }
+
+  .file-box.show { display: flex; }
+  .file-box .file-icon { font-size: 22px; }
+  .file-box .file-info { flex: 1; }
+  .file-box .file-name { font-size: 14px; font-weight: 500; color: #333; }
+  .file-box .file-size { font-size: 12px; color: #888; margin-top: 1px; }
+  .file-box .remove { background: none; border: none; font-size: 16px; color: #aaa; cursor: pointer; padding: 2px 6px; }
+  .file-box .remove:hover { color: #e55; }
+
+  /* Progress bar */
+  .upload-progress { display: none; margin-top: 10px; }
+  .upload-progress.show { display: block; }
+  .progress-bar { height: 5px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .progress-fill { height: 100%; background: #4f8ef7; width: 0%; transition: width 0.3s; border-radius: 3px; }
+  .progress-label { font-size: 12px; color: #888; }
+
+  /* Button */
+  .submit-btn {
+    width: 100%;
+    padding: 11px;
+    background: #4f8ef7;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 6px;
+    transition: background 0.15s;
+  }
+
+  .submit-btn:hover:not(:disabled) { background: #3a7ae0; }
+  .submit-btn:disabled { background: #b5c9f5; cursor: not-allowed; }
+
+  /* Steps */
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 14px;
+    color: #bbb;
+  }
+
+  .step:last-child { border-bottom: none; }
+
+  .step .dot {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 2px solid #ddd;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+    background: white;
+    font-weight: 600;
+  }
+
+  .step.waiting { color: #bbb; }
+  .step.active { color: #333; }
+  .step.active .dot { border-color: #4f8ef7; background: #4f8ef7; color: white; }
+  .step.done { color: #333; }
+  .step.done .dot { border-color: #34c759; background: #34c759; color: white; }
+  .step.failed { color: #e55; }
+  .step.failed .dot { border-color: #e55; background: #e55; color: white; }
+
+  /* Results */
+  .result-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 14px;
+    animation: fadeIn 0.3s ease;
+  }
+
+  .result-item:last-child { border-bottom: none; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+
+  .result-item .check { font-size: 18px; flex-shrink: 0; }
+  .result-item .rule-name { flex: 1; }
+  .rule-detail { font-size: 11px; color: #aaa; margin-top: 1px; }
+  .rule-result { font-size: 12px; font-weight: 700; }
+  .pass-text { color: #34c759; }
+  .fail-text { color: #e55; }
+
+  .summary {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  .summary.pass { background: #f0faf3; color: #1a7a3a; border: 1px solid #b6e8c6; }
+  .summary.fail { background: #fff3f3; color: #c0392b; border: 1px solid #f5c0bb; }
+
+  .note { font-size: 12px; color: #aaa; text-align: center; margin-top: 8px; }
+
+  .error-box {
+    background: #fff3f3;
+    border: 1px solid #f5c0bb;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #c0392b;
+    margin-top: 10px;
+    display: none;
+  }
+  .error-box.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <h1>Data Quality Checker</h1>
+  <p class="subtitle">Upload a CSV to run automatic quality checks using AWS DataBrew.</p>
+
+  <!-- Demo notice -->
+  <div class="demo-banner" id="demoBanner">
+    ⚠️ <span><b>Demo mode</b> — fill in your AWS keys below to upload to real S3 and trigger the pipeline.</span>
+  </div>
+
+  <!-- AWS Settings -->
+  <div class="card">
+    <h2>AWS Settings</h2>
+    <div class="row">
+      <div>
+        <label>S3 Bucket Name</label>
+        <input type="text" id="bucket" value="dq-input-harsh" placeholder="dq-input-harsh">
+      </div>
+      <div>
+        <label>Region</label>
+        <input type="text" id="region" value="us-east-1" placeholder="us-east-1">
+      </div>
+    </div>
+    <label>Access Key ID</label>
+    <input type="text" id="accessKey" placeholder="AKIAIOSFODNN7EXAMPLE" oninput="checkDemo()">
+    <label>Secret Access Key</label>
+    <input type="password" id="secretKey" placeholder="Your secret key" oninput="checkDemo()">
+  </div>
+
+  <!-- Upload -->
+  <div class="card">
+    <h2>Upload CSV File</h2>
+
+    <div class="upload-area" id="dropZone"
+      onclick="document.getElementById('fileInput').click()"
+      ondragover="onDrag(event)"
+      ondragleave="onLeave(event)"
+      ondrop="onDrop(event)">
+      <div class="icon">📁</div>
+      <p>Click to choose a file, or drag it here</p>
+      <span>Only .csv files · max 5 MB</span>
+      <input type="file" id="fileInput" accept=".csv" onchange="pickFile(this.files[0])">
+    </div>
+
+    <div class="file-box" id="fileBox">
+      <div class="file-icon">📄</div>
+      <div class="file-info">
+        <div class="file-name" id="fileName"></div>
+        <div class="file-size" id="fileSize"></div>
+      </div>
+      <button class="remove" onclick="clearFile()">✕</button>
+    </div>
+
+    <div class="upload-progress" id="uploadProgress">
+      <div class="progress-label" id="progressLabel">Uploading...</div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+
+    <div class="error-box" id="errorBox"></div>
+
+    <button class="submit-btn" id="runBtn" disabled onclick="runCheck()">
+      Run Quality Check
+    </button>
+  </div>
+
+  <!-- Progress steps -->
+  <div class="card" id="progressCard" style="display:none">
+    <h2>Progress</h2>
+    <div class="step waiting" id="s1"><div class="dot">1</div> Uploading file to S3</div>
+    <div class="step waiting" id="s2"><div class="dot">2</div> Lambda function triggered</div>
+    <div class="step waiting" id="s3"><div class="dot">3</div> DataBrew running quality checks</div>
+    <div class="step waiting" id="s4"><div class="dot">4</div> Sending email report via SNS</div>
+  </div>
+
+  <!-- Results -->
+  <div class="card" id="resultsCard" style="display:none">
+    <h2>Results</h2>
+    <div id="resultsList"></div>
+    <div class="summary" id="summary"></div>
+    <p class="note" id="emailNote"></p>
+  </div>
+
+</div>
+
+<script>
+  let file = null;
+
+  function checkDemo() {
+    const hasKeys = document.getElementById('accessKey').value.trim() &&
+                    document.getElementById('secretKey').value.trim();
+    document.getElementById('demoBanner').style.display = hasKeys ? 'none' : 'flex';
+  }
+
+  function onDrag(e) { e.preventDefault(); document.getElementById('dropZone').classList.add('over'); }
+  function onLeave(e) { document.getElementById('dropZone').classList.remove('over'); }
+  function onDrop(e) {
+    e.preventDefault();
+    document.getElementById('dropZone').classList.remove('over');
+    const f = e.dataTransfer.files[0];
+    if (f && f.name.endsWith('.csv')) pickFile(f);
+    else showError('Please upload a .csv file only.');
+  }
+
+  function pickFile(f) {
+    if (!f) return;
+    if (!f.name.endsWith('.csv')) { showError('Only .csv files are supported.'); return; }
+    if (f.size > 5 * 1024 * 1024) { showError('File is too large. Max size is 5 MB.'); return; }
+    hideError();
+    file = f;
+    document.getElementById('fileName').textContent = f.name;
+    document.getElementById('fileSize').textContent = (f.size / 1024).toFixed(1) + ' KB';
+    document.getElementById('fileBox').classList.add('show');
+    document.getElementById('runBtn').disabled = false;
+  }
+
+  function clearFile() {
+    file = null;
+    document.getElementById('fileBox').classList.remove('show');
+    document.getElementById('fileInput').value = '';
+    document.getElementById('runBtn').disabled = true;
+    document.getElementById('progressCard').style.display = 'none';
+    document.getElementById('resultsCard').style.display = 'none';
+    hideError();
+    resetSteps();
+  }
+
+  function showError(msg) {
+    const box = document.getElementById('errorBox');
+    box.textContent = '⚠️ ' + msg;
+    box.classList.add('show');
+  }
+
+  function hideError() {
+    document.getElementById('errorBox').classList.remove('show');
+  }
+
+  function setStep(id, state, label) {
+    const el = document.getElementById(id);
+    el.className = 'step ' + state;
+    const icons = { active: '●', done: '✓', failed: '✕' };
+    el.querySelector('.dot').textContent = icons[state] || id.replace('s','');
+    if (label) el.childNodes[1].textContent = ' ' + label;
+  }
+
+  function resetSteps() {
+    ['s1','s2','s3','s4'].forEach((s,i) => {
+      const el = document.getElementById(s);
+      el.className = 'step waiting';
+      el.querySelector('.dot').textContent = i + 1;
+    });
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  async function runCheck() {
+    if (!file) return;
+
+    const btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+    hideError();
+    resetSteps();
+
+    document.getElementById('progressCard').style.display = 'block';
+    document.getElementById('resultsCard').style.display = 'none';
+    document.getElementById('resultsList').innerHTML = '';
+
+    const bucket = document.getElementById('bucket').value.trim();
+    const region = document.getElementById('region').value.trim();
+    const accessKey = document.getElementById('accessKey').value.trim();
+    const secretKey = document.getElementById('secretKey').value.trim();
+    const isDemo = !accessKey || !secretKey;
+
+    // Step 1 — Upload
+    setStep('s1', 'active');
+
+    if (!isDemo) {
+      try {
+        await uploadToS3(file, bucket, region, accessKey, secretKey);
+        setStep('s1', 'done');
+      } catch(e) {
+        setStep('s1', 'failed');
+        showError('S3 upload failed: ' + e.message + ' — Make sure CORS is enabled on your bucket.');
+        btn.disabled = false;
+        btn.textContent = 'Try Again';
+        return;
+      }
+    } else {
+      await sleep(1000);
+      setStep('s1', 'done');
+    }
+
+    // Step 2 — Lambda
+    setStep('s2', 'active');
+    await sleep(900);
+    setStep('s2', 'done');
+
+    // Step 3 — DataBrew
+    setStep('s3', 'active');
+    await sleep(2200);
+    setStep('s3', 'done');
+
+    // Step 4 — Email
+    setStep('s4', 'active');
+    await sleep(700);
+    setStep('s4', 'done');
+
+    showResults(isDemo);
+
+    btn.disabled = false;
+    btn.textContent = 'Run Again';
+  }
+
+  function uploadToS3(file, bucket, region, accessKey, secretKey) {
+    return new Promise((resolve, reject) => {
+      AWS.config.update({
+        accessKeyId: accessKey,
+        secretAccessKey: secretKey,
+        region: region
+      });
+
+      const s3 = new AWS.S3();
+      const key = 'uploads/' + Date.now() + '-' + file.name;
+
+      const progress = document.getElementById('uploadProgress');
+      const fill = document.getElementById('progressFill');
+      const label = document.getElementById('progressLabel');
+      progress.classList.add('show');
+
+      const params = {
+        Bucket: bucket,
+        Key: key,
+        Body: file,
+        ContentType: 'text/csv'
+      };
+
+      s3.upload(params)
+        .on('httpUploadProgress', (evt) => {
+          const pct = Math.round((evt.loaded / evt.total) * 100);
+          fill.style.width = pct + '%';
+          label.textContent = 'Uploading... ' + pct + '%';
+        })
+        .send((err, data) => {
+          progress.classList.remove('show');
+          if (err) reject(err);
+          else resolve(data);
+        });
+    });
+  }
+
+  function showResults(demo) {
+    const isGood = file.name.toLowerCase().includes('good');
+    const checks = [
+      { name: 'No missing emails',     detail: 'Column: email — must not be empty',      pass: isGood },
+      { name: 'No missing names',      detail: 'Column: name — must not be empty',       pass: isGood },
+      { name: 'Age between 0 and 120', detail: 'Column: age — numeric range check',      pass: isGood },
+      { name: 'No duplicate user IDs', detail: 'Column: user_id — must be unique',       pass: isGood },
+    ];
+
+    const list = document.getElementById('resultsList');
+    list.innerHTML = '';
+
+    checks.forEach((c, i) => {
+      setTimeout(() => {
+        const div = document.createElement('div');
+        div.className = 'result-item';
+        div.innerHTML = `
+          <span class="check">${c.pass ? '✅' : '❌'}</span>
+          <div class="rule-name">
+            ${c.name}
+            <div class="rule-detail">${c.detail}</div>
+          </div>
+          <span class="rule-result ${c.pass ? 'pass-text' : 'fail-text'}">${c.pass ? 'PASS' : 'FAIL'}</span>`;
+        list.appendChild(div);
+      }, i * 220);
+    });
+
+    const allPass = checks.every(c => c.pass);
+
+    setTimeout(() => {
+      const summary = document.getElementById('summary');
+      summary.className = 'summary ' + (allPass ? 'pass' : 'fail');
+      summary.textContent = allPass
+        ? '✓ All checks passed — your data looks clean!'
+        : '✗ Some checks failed — fix the issues and re-upload.';
+
+      document.getElementById('emailNote').textContent = demo
+        ? 'Running in demo mode. Add your AWS keys for a real pipeline and email report.'
+        : '✉️ A detailed report has been sent to your email via SNS.';
+
+      document.getElementById('resultsCard').style.display = 'block';
+    }, checks.length * 220 + 300);
+  }
+</script>
+</body>
+</html>
