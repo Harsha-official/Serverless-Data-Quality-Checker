@@ -1,4 +1,6 @@
 #  Serverless Data Quality Checker
+<img width="54" height="28" alt="image" src="https://github.com/user-attachments/assets/eb729585-ce6a-469c-9e97-ba6e9021e3af" />
+
 
 > Automatically validate CSV data quality using AWS — upload a file and get an email report within minutes.
 
@@ -220,7 +222,3 @@ This project runs entirely within the AWS Free Tier for small workloads.
 🔗 [GitHub](https://github.com/Harsha-official)
 
 ---
-
-## 📄 License
-
-MIT
